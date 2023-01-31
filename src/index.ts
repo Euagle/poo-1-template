@@ -2,8 +2,9 @@ import express, { Request, Response } from 'express'
 import cors from 'cors'
 import { TVideoDB } from './types'
 import { Video } from './models/Video';
+import { VideosDataBase } from './database/VideoDataBase';
 
-import { db } from './database/knex'
+// import { db } from './database/BaseDatabase'
 
 const app = express()
 
@@ -14,6 +15,7 @@ app.listen(3003, () => {
     console.log(`Servidor rodando na porta ${3003}`)
 })
 
+//teste
 app.get("/ping", async (req: Request, res: Response) => {
     try {
         res.status(200).send({ message: "Pong!" })
@@ -32,19 +34,16 @@ app.get("/ping", async (req: Request, res: Response) => {
     }
 })
 
+
+//código refatorado com o uso do poo
+//pesquisa todos os videos
 app.get("/videos", async (req: Request, res: Response) => {
     try {
-        const q = req.query.q
+        const q = req.query.q as string | undefined
 
-        let videosDB
-
-        if (q) {
-            const result: TVideoDB[] = await db("videos").where("name", "LIKE", `%${q}%`)
-            videosDB = result
-        } else {
-            const result: TVideoDB[] = await db("videos")
-            videosDB = result
-        }
+       
+        const videosDatabase = new VideosDataBase()
+        const videosDB =await videosDatabase.findVideos(q)
 
         res.status(200).send(videosDB)
     } catch (error) {
@@ -62,6 +61,7 @@ app.get("/videos", async (req: Request, res: Response) => {
     }
 })
 
+//cria novo video
 
 app.post("/videos", async (req: Request, res: Response) => {
     try {
@@ -79,8 +79,12 @@ app.post("/videos", async (req: Request, res: Response) => {
             duration: newVideo.getDuration(),
             upload_at: newVideo.getCreatedAt()
         }
-        await db("videos").insert(newVideoDB)
-        res.status(201).send(newVideo)
+
+       
+
+        const videosDatabase = new VideosDataBase() 
+        await videosDatabase.insertVideo(newVideoDB) 
+
 
 
     } catch (error) {
@@ -97,42 +101,40 @@ app.post("/videos", async (req: Request, res: Response) => {
         }
     }
 })
+
+
+//edita video pelo id
 app.put("/videos/:id", async (req: Request, res: Response) => {
     try {
-        const idToEdit = req.params.id
-
+        const id = req.params.id
         const { newId, newTitle, newDuration } = req.body
 
-        const [video] = await db("videos").where({ id: idToEdit })
-
-        const newVideo = new Video(
-            newId,
+        const videoDatabase = new VideosDataBase()
+        const videoDB = await videoDatabase.findVideosById(id)
+        console.log({videoDB})
+        if (!videoDB) {
+            res.status(400)
+            throw new Error("'id' não encontrada")
+        }
+         
+          const newVideo = new Video(
+            newId || videoDB.id,
             newTitle,
             newDuration,
-            new Date().toISOString()
-        )
-
-        const newVideoDB: TVideoDB = {
+            videoDB.upload_at     
+          )
+            const newVideoDB: TVideoDB = {
             id: newVideo.getId(),
             title: newVideo.getTitle(),
             duration: newVideo.getDuration(),
             upload_at: newVideo.getCreatedAt()
         }
-
-        if (video) {
-            const updateVideo = {
-                id: newVideoDB.id || video.id,
-                title: newVideoDB.title || video.title,
-                duration: newVideoDB.duration || video.duration,
-            }
-            await db("videos")
-                .update(updateVideo)
-                .where({ id: idToEdit })
-        } else {
-            res.status(404)
-            throw new Error("Id inválida")
-        }
-        res.status(201).send(newVideoDB)
+        console.log(newVideoDB)
+        
+        await videoDatabase.editeVideo(newVideoDB, id)
+        console.log({newVideoDB})
+        res.status(201).send(newVideo)
+        
     } catch (error) {
         console.log(error)
 
@@ -148,13 +150,17 @@ app.put("/videos/:id", async (req: Request, res: Response) => {
     }
 })
 
+//Deleta video pelo id
 app.delete("/videos/:id", async (req:Request, res:Response)=>{
 try{    
-    const idToDelete = req.params.id
-    const [verificaVideo] = await db("videos").where({id: idToDelete})
+    const id = req.params.id
 
-    if(verificaVideo){
-        await db("videos").del().where({id: idToDelete})
+    const videoDatabase = new VideosDataBase()
+    const videoDB = await videoDatabase.findVideosById(id)
+
+
+    if(videoDB){
+        await videoDatabase.deletVideo(id)
     }else{
         res.status(400)
         throw new Error("Id não encontrada")
