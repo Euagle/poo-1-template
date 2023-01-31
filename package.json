@@ -6,8 +6,9 @@
     "scripts": {
         "start": "node ./build/index.js",
         "build": "tsc",
-        "dev": "ts-node-dev ./src/index.ts"
-    },
+        "dev": "ts-node-dev ./src/index.ts",
+        "classTest": "ts-node-dev ./src/models/Video.ts"
+        },
     "keywords": [],
     "author": "",
     "license": "ISC",

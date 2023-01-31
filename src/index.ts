@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express'
 import cors from 'cors'
-import { TAccountDB, TAccountDBPost, TUserDB, TUserDBPost } from './types'
+import { TVideoDB } from './types'
+import { Video } from './models/Video';
+
 import { db } from './database/knex'
 
 const app = express()
@@ -30,21 +32,21 @@ app.get("/ping", async (req: Request, res: Response) => {
     }
 })
 
-app.get("/users", async (req: Request, res: Response) => {
+app.get("/videos", async (req: Request, res: Response) => {
     try {
         const q = req.query.q
 
-        let usersDB
+        let videosDB
 
         if (q) {
-            const result: TUserDB[] = await db("users").where("name", "LIKE", `%${q}%`)
-            usersDB = result
+            const result: TVideoDB[] = await db("videos").where("name", "LIKE", `%${q}%`)
+            videosDB = result
         } else {
-            const result: TUserDB[] = await db("users")
-            usersDB = result
+            const result: TVideoDB[] = await db("videos")
+            videosDB = result
         }
 
-        res.status(200).send(usersDB)
+        res.status(200).send(videosDB)
     } catch (error) {
         console.log(error)
 
@@ -60,48 +62,27 @@ app.get("/users", async (req: Request, res: Response) => {
     }
 })
 
-app.post("/users", async (req: Request, res: Response) => {
+
+app.post("/videos", async (req: Request, res: Response) => {
     try {
-        const { id, name, email, password } = req.body
+        const { id, title, duration } = req.body
 
-        if (typeof id !== "string") {
-            res.status(400)
-            throw new Error("'id' deve ser string")
-        }
-
-        if (typeof name !== "string") {
-            res.status(400)
-            throw new Error("'name' deve ser string")
-        }
-
-        if (typeof email !== "string") {
-            res.status(400)
-            throw new Error("'email' deve ser string")
-        }
-
-        if (typeof password !== "string") {
-            res.status(400)
-            throw new Error("'password' deve ser string")
-        }
-
-        const [ userDBExists ]: TUserDB[] | undefined[] = await db("users").where({ id })
-
-        if (userDBExists) {
-            res.status(400)
-            throw new Error("'id' já existe")
-        }
-
-        const newUser: TUserDBPost = {
+        const newVideo = new Video(
             id,
-            name,
-            email,
-            password
+            title,
+            duration,
+            new Date().toISOString()
+        )
+        const newVideoDB: TVideoDB = {
+            id: newVideo.getId(),
+            title: newVideo.getTitle(),
+            duration: newVideo.getDuration(),
+            upload_at: newVideo.getCreatedAt()
         }
+        await db("videos").insert(newVideoDB)
+        res.status(201).send(newVideo)
 
-        await db("users").insert(newUser)
-        const [ userDB ]: TUserDB[] = await db("users").where({ id })
 
-        res.status(201).send(userDB)
     } catch (error) {
         console.log(error)
 
@@ -116,39 +97,42 @@ app.post("/users", async (req: Request, res: Response) => {
         }
     }
 })
-
-app.get("/accounts", async (req: Request, res: Response) => {
+app.put("/videos/:id", async (req: Request, res: Response) => {
     try {
-        const accountsDB: TAccountDB[] = await db("accounts")
+        const idToEdit = req.params.id
 
-        res.status(200).send(accountsDB)
-    } catch (error) {
-        console.log(error)
+        const { newId, newTitle, newDuration } = req.body
 
-        if (req.statusCode === 200) {
-            res.status(500)
+        const [video] = await db("videos").where({ id: idToEdit })
+
+        const newVideo = new Video(
+            newId,
+            newTitle,
+            newDuration,
+            new Date().toISOString()
+        )
+
+        const newVideoDB: TVideoDB = {
+            id: newVideo.getId(),
+            title: newVideo.getTitle(),
+            duration: newVideo.getDuration(),
+            upload_at: newVideo.getCreatedAt()
         }
 
-        if (error instanceof Error) {
-            res.send(error.message)
+        if (video) {
+            const updateVideo = {
+                id: newVideoDB.id || video.id,
+                title: newVideoDB.title || video.title,
+                duration: newVideoDB.duration || video.duration,
+            }
+            await db("videos")
+                .update(updateVideo)
+                .where({ id: idToEdit })
         } else {
-            res.send("Erro inesperado")
-        }
-    }
-})
-
-app.get("/accounts/:id/balance", async (req: Request, res: Response) => {
-    try {
-        const id = req.params.id
-
-        const [ accountDB ]: TAccountDB[] | undefined[] = await db("accounts").where({ id })
-
-        if (!accountDB) {
             res.status(404)
-            throw new Error("'id' não encontrado")
+            throw new Error("Id inválida")
         }
-
-        res.status(200).send({ balance: accountDB.balance })
+        res.status(201).send(newVideoDB)
     } catch (error) {
         console.log(error)
 
@@ -164,85 +148,22 @@ app.get("/accounts/:id/balance", async (req: Request, res: Response) => {
     }
 })
 
+app.delete("/videos/:id", async (req:Request, res:Response)=>{
+try{    
+    const idToDelete = req.params.id
+    const [verificaVideo] = await db("videos").where({id: idToDelete})
 
-app.post("/accounts", async (req: Request, res: Response) => {
-    try {
-        const { id, ownerId } = req.body
-
-        if (typeof id !== "string") {
-            res.status(400)
-            throw new Error("'id' deve ser string")
-        }
-
-        if (typeof ownerId !== "string") {
-            res.status(400)
-            throw new Error("'ownerId' deve ser string")
-        }
-
-        const [ accountDBExists ]: TAccountDB[] | undefined[] = await db("accounts").where({ id })
-
-        if (accountDBExists) {
-            res.status(400)
-            throw new Error("'id' já existe")
-        }
-
-        const newAccount: TAccountDBPost = {
-            id,
-            owner_id: ownerId
-        }
-
-        await db("accounts").insert(newAccount)
-        const [ accountDB ]: TAccountDB[] = await db("accounts").where({ id })
-
-        res.status(201).send(accountDB)
-    } catch (error) {
+    if(verificaVideo){
+        await db("videos").del().where({id: idToDelete})
+    }else{
+        res.status(400)
+        throw new Error("Id não encontrada")
+    } 
+}catch (error) {
         console.log(error)
-
-        if (req.statusCode === 200) {
+        if (res.statusCode === 200) {
             res.status(500)
         }
-
-        if (error instanceof Error) {
-            res.send(error.message)
-        } else {
-            res.send("Erro inesperado")
-        }
-    }
-})
-
-app.put("/accounts/:id/balance", async (req: Request, res: Response) => {
-    try {
-        const id = req.params.id
-        const value = req.body.value
-
-        if (typeof value !== "number") {
-            res.status(400)
-            throw new Error("'value' deve ser number")
-        }
-
-        const [ accountDB ]: TAccountDB[] | undefined[] = await db("accounts").where({ id })
-
-        if (!accountDB) {
-            res.status(404)
-            throw new Error("'id' não encontrado")
-        }
-
-        accountDB.balance += value
-
-        await db("accounts").update({ balance: accountDB.balance }).where({ id })
-        
-        res.status(200).send(accountDB)
-    } catch (error) {
-        console.log(error)
-
-        if (req.statusCode === 200) {
-            res.status(500)
-        }
-
-        if (error instanceof Error) {
-            res.send(error.message)
-        } else {
-            res.send("Erro inesperado")
-        }
+        res.send(error)
     }
 })
