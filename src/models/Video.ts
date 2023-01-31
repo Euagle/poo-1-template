@@ -45,12 +45,3 @@ public setCreatedAt(value:string): void {
 
 }
 
-// criando um video
-const video = new Video(
-    "u004",
-    "Aula de poo",
-    "60min",
-    "2023-01-30 22:22:00"
-
-)
-console.table(video)
